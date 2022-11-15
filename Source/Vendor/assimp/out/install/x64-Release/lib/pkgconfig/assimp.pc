@@ -1,0 +1,9 @@
+libdir=C:/Users/Darren/source/repos/Suoh/Suoh/Vendor/assimp/out/install/x64-Release/lib
+includedir=C:/Users/Darren/source/repos/Suoh/Suoh/Vendor/assimp/out/install/x64-Release/include
+
+Name: Assimp
+Description: Import various well-known 3D model formats in an uniform manner.
+Version: 5.2.5
+Libs: -L${libdir} -lassimp
+Libs.private:  
+Cflags: -I${includedir}

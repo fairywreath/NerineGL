@@ -1,0 +1,12 @@
+BasedOnStyle: Microsoft
+IndentWidth: 4
+
+# yucks...
+AccessModifierOffset: -4
+
+PointerAlignment: Left
+# ReferenceAlignment: Pointer
+
+BreakBeforeBinaryOperators: All
+
+ColumnLimit: 100

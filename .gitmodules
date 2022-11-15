@@ -1,0 +1,18 @@
+[submodule "Source/Vendor/glm"]
+	path = Source/Vendor/glm
+	url = git@github.com:g-truc/glm.git
+[submodule "Source/Vendor/glfw"]
+	path = Source/Vendor/glfw
+	url = git@github.com:glfw/glfw.git
+[submodule "Source/Vendor/meshoptimizer"]
+	path = Source/Vendor/meshoptimizer
+	url = git@github.com:zeux/meshoptimizer.git
+[submodule "Source/Vendor/gli"]
+	path = Source/Vendor/gli
+	url = git@github.com:g-truc/gli.git
+[submodule "Source/Vendor/imgui"]
+	path = Source/Vendor/imgui
+	url = git@github.com:ocornut/imgui.git
+[submodule "Source/Vendor/rapidjson"]
+	path = Source/Vendor/rapidjson
+	url = git@github.com:Tencent/rapidjson.git
