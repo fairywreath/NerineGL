@@ -114,11 +114,21 @@ ProgramHandle CreateProgram(ShaderHandle a, ShaderHandle b);
 class GLFramebuffer : public RefCountResource<IResource>
 {
 public:
+    // Render target color sampling type.
+    enum class SamplerFilterType
+    {
+        Nearest,
+        Linear,
+    };
+
     GLFramebuffer() = default;
-    GLFramebuffer(u32 width, u32 height, GLenum formatColor, GLenum formatDepth);
+    GLFramebuffer(u32 width, u32 height, GLenum formatColor, GLenum formatDepth,
+                  SamplerFilterType filterType = SamplerFilterType::Linear);
+
     ~GLFramebuffer();
 
-    void Create(u32 width, u32 height, GLenum formatColor, GLenum formatDepth);
+    void Create(u32 width, u32 height, GLenum formatColor, GLenum formatDepth,
+                SamplerFilterType filterType);
     void Destroy();
 
     void Bind();
@@ -134,6 +144,8 @@ public:
 
 using FramebufferHandle = RefCountPtr<GLFramebuffer>;
 
-FramebufferHandle CreateFramebuffer(u32 width, u32 height, GLenum formatColor, GLenum formatDepth);
+FramebufferHandle CreateFramebuffer(u32 width, u32 height, GLenum formatColor, GLenum formatDepth,
+                                    GLFramebuffer::SamplerFilterType filterType
+                                    = GLFramebuffer::SamplerFilterType::Linear);
 
 } // namespace Nerine

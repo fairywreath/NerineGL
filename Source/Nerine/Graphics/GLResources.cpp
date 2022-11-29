@@ -201,9 +201,11 @@ ProgramHandle CreateProgram(ShaderHandle a, ShaderHandle b)
     return ProgramHandle::Create(new GLProgram(a, b));
 }
 
-FramebufferHandle CreateFramebuffer(u32 width, u32 height, GLenum formatColor, GLenum formatDepth)
+FramebufferHandle CreateFramebuffer(u32 width, u32 height, GLenum formatColor, GLenum formatDepth,
+                                    GLFramebuffer::SamplerFilterType filterType)
 {
-    return FramebufferHandle::Create(new GLFramebuffer(width, height, formatColor, formatDepth));
+    return FramebufferHandle::Create(
+        new GLFramebuffer(width, height, formatColor, formatDepth, filterType));
 }
 
 GLProgram::GLProgram(const ShaderHandle& a)
@@ -263,9 +265,10 @@ void GLProgram::Use() const
     glUseProgram(m_Handle);
 }
 
-GLFramebuffer::GLFramebuffer(u32 width, u32 height, GLenum formatColor, GLenum formatDepth)
+GLFramebuffer::GLFramebuffer(u32 width, u32 height, GLenum formatColor, GLenum formatDepth,
+                             SamplerFilterType filterType)
 {
-    Create(width, height, formatColor, formatDepth);
+    Create(width, height, formatColor, formatDepth, filterType);
 }
 
 GLFramebuffer::~GLFramebuffer()
@@ -276,13 +279,22 @@ GLFramebuffer::~GLFramebuffer()
     }
 }
 
-void GLFramebuffer::Create(u32 width, u32 height, GLenum formatColor, GLenum formatDepth)
+void GLFramebuffer::Create(u32 width, u32 height, GLenum formatColor, GLenum formatDepth,
+                           SamplerFilterType filterType)
 {
     glCreateFramebuffers(1, &m_Handle);
 
     if (formatColor)
     {
         attachmentColor = CreateTexture(GL_TEXTURE_2D, width, height, formatColor);
+
+        // Default filter type from CreateTexture is Linear.
+
+        if (filterType == SamplerFilterType::Nearest)
+        {
+            glTextureParameteri(attachmentColor->m_Handle, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+            glTextureParameteri(attachmentColor->m_Handle, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+        }
 
         glTextureParameteri(attachmentColor->m_Handle, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
         glTextureParameteri(attachmentColor->m_Handle, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);

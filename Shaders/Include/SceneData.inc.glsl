@@ -7,4 +7,6 @@ layout(std140, binding = 0) uniform SceneData
     vec4 frustumPlanes[6];
     vec4 frustumCorners[8];
     uint numShapesToCull;
+
+    vec2 taaJitterOffset;
 };

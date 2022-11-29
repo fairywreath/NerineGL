@@ -30,6 +30,10 @@ struct GPUSceneData
     vec4 frustumPlanes[6];
     vec4 frustumCorners[8];
     u32 numShapesToCull;
+
+    // XXX: Create packed vec2?
+    float jitterOffsetX;
+    float jitterOffsetY;
 };
 
 struct GPUSSAOParams

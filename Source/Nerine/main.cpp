@@ -28,9 +28,11 @@ struct MouseState
 
 struct RenderSettings
 {
-    std::string meshFile;
-    std::string sceneFile;
-    std::string materialFile;
+    ivec2 resolution;
+
+    std::string meshFile{""};
+    std::string sceneFile{""};
+    std::string materialFile{""};
 
     // XXX: Environment map, light settings etc.
 };
@@ -43,11 +45,17 @@ RenderSettings ParseRenderSettings(const std::string& str)
     assert(d["meshFile"].IsString());
     assert(d["sceneFile"].IsString());
     assert(d["materialFile"].IsString());
+    assert(d["resolution"]["x"].IsInt());
+    assert(d["resolution"]["y"].IsInt());
 
     RenderSettings settings;
+
     settings.meshFile = d["meshFile"].GetString();
     settings.sceneFile = d["sceneFile"].GetString();
     settings.materialFile = d["materialFile"].GetString();
+
+    settings.resolution.x = d["resolution"]["x"].GetInt();
+    settings.resolution.y = d["resolution"]["y"].GetInt();
 
     return settings;
 }
@@ -96,10 +104,14 @@ struct ApplicationRenderState
     bool enableSSAOBlur{true};
 
     bool enableHDR{true};
+
+    bool enableTAA{true};
 } renderState;
 
 GPUSSAOParams ssaoParams;
 GPUHDRParams hdrParams;
+
+bool nextFrame = true;
 
 void GLAPIENTRY MessageCallback(GLenum source, GLenum type, GLuint id, GLenum severity,
                                 GLsizei length, const GLchar* message, const void* userParam)
@@ -127,7 +139,7 @@ int main(int argc, char* argv[])
         return -1;
     }
 
-    Window window(1920, 1080, "GL Renderer");
+    Window window(renderSettings.resolution.x, renderSettings.resolution.y, "GL Renderer");
 
     // Load glad.
     if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress))
@@ -137,7 +149,7 @@ int main(int argc, char* argv[])
     }
     glViewport(0, 0, window.GetWidth(), window.GetHeight());
     glEnable(GL_DEBUG_OUTPUT);
-    glDebugMessageCallback(MessageCallback, 0);
+    // glDebugMessageCallback(MessageCallback, 0);
 
     window.AddResizeCallback(
         [](int windowWidth, int windowHeight) { glViewport(0, 0, windowWidth, windowHeight); });
@@ -183,6 +195,11 @@ int main(int argc, char* argv[])
                                mainCameraController.SetUpVector(vec3(0.0f, 1.0f, 0.0f));
                            if (key == GLFW_KEY_P && pressed)
                                renderState.freezeCullingView = !renderState.freezeCullingView;
+
+                           if (key == GLFW_KEY_ENTER && pressed)
+                           {
+                               nextFrame = true;
+                           }
                        });
     mainCameraController.MaxSpeed = 1.0f;
 
@@ -191,9 +208,12 @@ int main(int argc, char* argv[])
     /*
      * Shaders.
      */
-    auto vsSceneMesh = CreateShader("Shaders/Scene/Mesh.vs.glsl");
+    // auto vsSceneMesh = CreateShader("Shaders/Scene/Mesh.vs.glsl");
+    auto vsSceneMesh = CreateShader("Shaders/Scene/MeshJitter.vs.glsl");
     auto fsSceneMesh = CreateShader("Shaders/Scene/MeshIBL.fs.glsl");
     auto programSceneMesh = CreateProgram(vsSceneMesh, fsSceneMesh);
+    auto vsSceneMeshNoJitter = CreateShader("Shaders/Scene/Mesh.vs.glsl");
+    auto programSceneMeshNoJitter = CreateProgram(vsSceneMeshNoJitter, fsSceneMesh);
 
     // Generic fullscreen quad shader for post-processing.
     auto vsFullScreenQuad = CreateShader("Shaders/FullScreen/FullScreenQuad.vs.glsl");
@@ -201,7 +221,10 @@ int main(int argc, char* argv[])
     // OIT.
     auto fsOITMesh = CreateShader("Shaders/Scene/MeshOIT.fs.glsl");
     auto fsOIT = CreateShader("Shaders/PostProcess/OIT.fs.glsl");
-    auto programOITMesh = CreateProgram(vsSceneMesh, fsOITMesh);
+
+    // No jitter for transparent meshes.
+    auto programOITMesh = CreateProgram(vsSceneMeshNoJitter, fsOITMesh);
+
     auto programOIT = CreateProgram(vsFullScreenQuad, fsOIT);
 
     // GPU culling.
@@ -386,6 +409,41 @@ int main(int argc, char* argv[])
     // Sync flags.
     GLsync fenceCulling = nullptr;
 
+    /*
+     * TAA setup.
+     */
+    constexpr auto JitterSequenceCount = 16;
+    // Hardcoded halton sequence.
+    const std::vector<vec2> HaltonSequence
+        = {{0.500000, 0.333333}, {0.250000, 0.666667}, {0.750000, 0.111111}, {0.125000, 0.444444},
+           {0.625000, 0.777778}, {0.375000, 0.222222}, {0.875000, 0.555556}, {0.062500, 0.888889},
+           {0.562500, 0.037037}, {0.312500, 0.370370}, {0.812500, 0.703704}, {0.187500, 0.148148},
+           {0.687500, 0.481481}, {0.437500, 0.814815}, {0.937500, 0.259259}, {0.031250, 0.592593}};
+
+    // XXX: Need to recalculate these when resolution changes.
+    std::vector<vec2> jitterOffsets(JitterSequenceCount);
+    for (int i = 0; i < JitterSequenceCount; i++)
+    {
+        auto offset = HaltonSequence[i];
+        offset.x = ((offset.x - 0.5f) / windowWidth) * 2;
+        offset.y = ((offset.y - 0.5f) / windowHeight) * 2;
+
+        LOG_INFO("Jitter offset x: ", offset.x);
+        LOG_INFO("Jitter offset y: ", offset.y);
+
+        jitterOffsets[i] = offset;
+    }
+
+    auto fsTAAResolve = CreateShader("Shaders/AntiAliasing/TAAResolve.fs.glsl");
+    auto programTAAResolve = CreateProgram(vsFullScreenQuad, fsTAAResolve);
+    auto fsBlit = CreateShader("Shaders/AntiAliasing/Blit.fs.glsl");
+    auto programBlit = CreateProgram(vsFullScreenQuad, fsBlit);
+
+    auto fbTAAColor = CreateFramebuffer(windowWidth, windowHeight, GL_RGBA16F, 0);
+    auto fbTAAColorHistory = CreateFramebuffer(windowWidth, windowHeight, GL_RGBA16F, 0);
+
+    // Misc. utils.
+    u32 frameCount = 0;
     FramesPerSecondCounter fpsCounter(0.5f);
 
     auto ImGuiPushFlagsAndStyles = [](bool value) {
@@ -404,6 +462,14 @@ int main(int argc, char* argv[])
 
     while (!glfwWindowShouldClose(windowPtr))
     {
+        // if (!nextFrame)
+        // {
+        //     window.PollEvents();
+        //     window.SwapBuffers();
+        //     continue;
+        // }
+        // nextFrame = false;
+
         const double newTimeStamp = glfwGetTime();
         deltaSeconds = static_cast<float>(newTimeStamp - timeStamp);
         timeStamp = newTimeStamp;
@@ -521,6 +587,10 @@ int main(int argc, char* argv[])
             // Disable shadows. XXX: Have a proper flag for this and replace this trick.
             sceneData.light = mat4(0.0f);
         }
+
+        auto taaJitterOffset = jitterOffsets[frameCount % 16];
+        sceneData.jitterOffsetX = taaJitterOffset.x;
+        sceneData.jitterOffsetY = taaJitterOffset.y;
         glNamedBufferSubData(bufferSceneData->m_Handle, 0, BufferSize_SceneData, &sceneData);
 
         // Mesh pass.
@@ -534,7 +604,11 @@ int main(int argc, char* argv[])
 
             if (renderState.drawOpaque)
             {
-                programSceneMesh->Use();
+                if (renderState.enableTAA)
+                    programSceneMesh->Use();
+                else
+                    programSceneMeshNoJitter->Use();
+
                 mesh.Draw(bufferIndirectMeshesOpaque->m_DrawCommands.size(),
                           bufferIndirectMeshesOpaque);
             }
@@ -545,6 +619,7 @@ int main(int argc, char* argv[])
                 glDepthMask(GL_FALSE);
                 glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
 
+                // XXX: Currently transparent meshes not sampled (no TAA jitter).
                 programOITMesh->Use();
                 mesh.Draw(bufferIndirectMeshesTransparent->m_DrawCommands.size(),
                           bufferIndirectMeshesTransparent);
@@ -556,6 +631,47 @@ int main(int argc, char* argv[])
             }
 
             fbOpaque->Unbind();
+        }
+
+        // TAA.
+        if (renderState.enableTAA)
+        {
+            // Copy current color buffer to history in first frame.
+            if (frameCount == 0)
+            {
+                fbTAAColorHistory->Bind();
+                programBlit->Use();
+                glBindTextureUnit(0, fbOpaque->attachmentColor->m_Handle);
+                glDrawArrays(GL_TRIANGLES, 0, 6);
+                fbTAAColorHistory->Unbind();
+            }
+
+            // XXX: Does current color buffer need to be sampled nearest?
+            glTextureParameteri(fbOpaque->attachmentColor->m_Handle, GL_TEXTURE_MIN_FILTER,
+                                GL_NEAREST);
+            glTextureParameteri(fbOpaque->attachmentColor->m_Handle, GL_TEXTURE_MAG_FILTER,
+                                GL_NEAREST);
+
+            // Resolve TAA.
+            fbTAAColor->Bind();
+            programTAAResolve->Use();
+            glBindTextureUnit(0, fbOpaque->attachmentColor->m_Handle);
+            glBindTextureUnit(1, fbTAAColorHistory->attachmentColor->m_Handle);
+            glDrawArrays(GL_TRIANGLES, 0, 6);
+            fbTAAColor->Unbind();
+
+            // Copy to history buffer.
+            fbTAAColorHistory->Bind();
+            programBlit->Use();
+            glBindTextureUnit(0, fbTAAColor->attachmentColor->m_Handle);
+            glDrawArrays(GL_TRIANGLES, 0, 6);
+            fbTAAColorHistory->Unbind();
+        }
+        else
+        {
+            glBlitNamedFramebuffer(fbOpaque->m_Handle, fbTAAColor->m_Handle, 0, 0, windowWidth,
+                                   windowHeight, 0, 0, windowWidth, windowHeight,
+                                   GL_COLOR_BUFFER_BIT, GL_LINEAR);
         }
 
         // SSAO.
@@ -593,19 +709,21 @@ int main(int argc, char* argv[])
                                       glm::value_ptr(vec4(0.0f, 0.0f, 0.0f, 1.0f)));
             fbScreen->Bind();
             programSSAOCombine->Use();
-            glBindTextureUnit(0, fbOpaque->attachmentColor->m_Handle);
+            // glBindTextureUnit(0, fbOpaque->attachmentColor->m_Handle);
+            glBindTextureUnit(0, fbTAAColor->attachmentColor->m_Handle);
             glBindTextureUnit(1, fbSSAO->attachmentColor->m_Handle);
             glDrawArrays(GL_TRIANGLES, 0, 6);
             fbScreen->Unbind();
         }
         else
         {
-            glBlitNamedFramebuffer(fbOpaque->m_Handle, fbScreen->m_Handle, 0, 0, windowWidth,
+            glBlitNamedFramebuffer(fbTAAColor->m_Handle, fbScreen->m_Handle, 0, 0, windowWidth,
                                    windowHeight, 0, 0, windowWidth, windowHeight,
                                    GL_COLOR_BUFFER_BIT, GL_LINEAR);
         }
 
         // Combine Transparent/OIT meshes.
+        // XXX: This happens after TAA. Is this okay?
         {
             glDisable(GL_DEPTH_TEST);
             glDisable(GL_BLEND);
@@ -760,6 +878,14 @@ int main(int argc, char* argv[])
         ImGui::Unindent(indentSize);
         ImGui::Separator();
 
+        ImGui::Text("Anti-Aliasing");
+        ImGui::Indent(indentSize);
+        ImGui::Checkbox("Enable TAA", &renderState.enableTAA);
+        ImGuiPushFlagsAndStyles(renderState.enableTAA);
+        ImGuiPopFlagsAndStyles();
+        ImGui::Unindent(indentSize);
+        ImGui::Separator();
+
         ImGui::End();
 
         if (renderState.enableSSAO)
@@ -775,6 +901,7 @@ int main(int argc, char* argv[])
         ImGui::Begin("Information", nullptr, guiflags);
         ImGui::Text("GPU: %s", gpuName.c_str());
         ImGui::Text("FPS: %f", fpsCounter.GetFPS());
+        ImGui::Text("Frame number: %d", frameCount);
         ImGui::End();
 
         ImGui::Render();
@@ -785,6 +912,7 @@ int main(int argc, char* argv[])
 
         window.PollEvents();
         window.SwapBuffers();
+        frameCount++;
     }
 
     glUnmapNamedBuffer(bufferNumVisibleMeshes->m_Handle);
