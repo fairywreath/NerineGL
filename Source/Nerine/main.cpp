@@ -597,6 +597,7 @@ int main(int argc, char* argv[])
         {
             glDisable(GL_BLEND);
             glEnable(GL_DEPTH_TEST);
+            // glDisable(GL_DEPTH_TEST);
 
             fbOpaque->Bind();
 
@@ -621,8 +622,11 @@ int main(int argc, char* argv[])
 
                 // XXX: Currently transparent meshes not sampled (no TAA jitter).
                 programOITMesh->Use();
-                mesh.Draw(bufferIndirectMeshesTransparent->m_DrawCommands.size(),
-                          bufferIndirectMeshesTransparent);
+                // mesh.Draw(bufferIndirectMeshesTransparent->m_DrawCommands.size(),
+                //   bufferIndirectMeshesTransparent);
+
+                // This shader pass is needed, even with no draw commands.
+                mesh.Draw(bufferIndirectMeshesTransparent->m_DrawCommands.size(), 0);
 
                 glFlush();
                 glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
@@ -647,10 +651,10 @@ int main(int argc, char* argv[])
             }
 
             // XXX: Does current color buffer need to be sampled nearest?
-            glTextureParameteri(fbOpaque->attachmentColor->m_Handle, GL_TEXTURE_MIN_FILTER,
-                                GL_NEAREST);
-            glTextureParameteri(fbOpaque->attachmentColor->m_Handle, GL_TEXTURE_MAG_FILTER,
-                                GL_NEAREST);
+            // glTextureParameteri(fbOpaque->attachmentColor->m_Handle, GL_TEXTURE_MIN_FILTER,
+            // GL_NEAREST);
+            // glTextureParameteri(fbOpaque->attachmentColor->m_Handle, GL_TEXTURE_MAG_FILTER,
+            //                     // GL_NEAREST);
 
             // Resolve TAA.
             fbTAAColor->Bind();
@@ -709,7 +713,7 @@ int main(int argc, char* argv[])
                                       glm::value_ptr(vec4(0.0f, 0.0f, 0.0f, 1.0f)));
             fbScreen->Bind();
             programSSAOCombine->Use();
-            // glBindTextureUnit(0, fbOpaque->attachmentColor->m_Handle);
+            glBindTextureUnit(0, fbOpaque->attachmentColor->m_Handle);
             glBindTextureUnit(0, fbTAAColor->attachmentColor->m_Handle);
             glBindTextureUnit(1, fbSSAO->attachmentColor->m_Handle);
             glDrawArrays(GL_TRIANGLES, 0, 6);

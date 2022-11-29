@@ -100,4 +100,6 @@ void main()
 
     // Assign final fragment color.
     out_FragColor = vec4(diffuse * ShadowFactor(in_ShadowCoord), 1.0);
+
+    // out_FragColor = vec4(albedo.rgb, 1.0);
 }
