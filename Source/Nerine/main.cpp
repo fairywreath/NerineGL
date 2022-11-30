@@ -728,18 +728,18 @@ int main(int argc, char* argv[])
 
         // Combine Transparent/OIT meshes.
         // XXX: This happens after TAA. Is this okay?
-        {
-            glDisable(GL_DEPTH_TEST);
-            glDisable(GL_BLEND);
-            fbOpaque->Bind();
-            programOIT->Use();
-            glBindTextureUnit(0, fbScreen->attachmentColor->m_Handle);
-            glDrawArrays(GL_TRIANGLES, 0, 6);
-            fbOpaque->Unbind();
-            glBlitNamedFramebuffer(fbOpaque->m_Handle, fbScreen->m_Handle, 0, 0, windowWidth,
-                                   windowHeight, 0, 0, windowWidth, windowHeight,
-                                   GL_COLOR_BUFFER_BIT, GL_LINEAR);
-        }
+        // {
+        //     glDisable(GL_DEPTH_TEST);
+        //     glDisable(GL_BLEND);
+        //     fbOpaque->Bind();
+        //     programOIT->Use();
+        //     glBindTextureUnit(0, fbScreen->attachmentColor->m_Handle);
+        //     glDrawArrays(GL_TRIANGLES, 0, 6);
+        //     fbOpaque->Unbind();
+        //     glBlitNamedFramebuffer(fbOpaque->m_Handle, fbScreen->m_Handle, 0, 0, windowWidth,
+        //                            windowHeight, 0, 0, windowWidth, windowHeight,
+        //                            GL_COLOR_BUFFER_BIT, GL_LINEAR);
+        // }
 
         // HDR.
         if (renderState.enableHDR)
@@ -896,6 +896,8 @@ int main(int argc, char* argv[])
             ImguiTextureWindowGL("SSAO", fbSSAO->attachmentColor->m_Handle);
         if (renderState.enableShadows)
             ImguiTextureWindowGL("Shadow Map", fbShadowMap->attachmentDepth->m_Handle);
+
+        ImguiTextureWindowGL("Depth map", fbOpaque->attachmentDepth->m_Handle);
 
         const ImGuiWindowFlags guiflags = ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize
                                           | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoScrollbar
