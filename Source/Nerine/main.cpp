@@ -108,6 +108,20 @@ struct ApplicationRenderState
     bool enableTAA{true};
 } renderState;
 
+// Halton(2, 3).
+float Halton(u32 i, u32 b)
+{
+    float f = 1.0f;
+    float r = 0.0f;
+    while (i > 0)
+    {
+        f /= static_cast<float>(b);
+        r = r + f * static_cast<float>(i % b);
+        i = static_cast<uint32_t>(floorf(static_cast<float>(i) / static_cast<float>(b)));
+    }
+    return r;
+}
+
 GPUSSAOParams ssaoParams;
 GPUHDRParams hdrParams;
 
@@ -269,6 +283,16 @@ int main(int argc, char* argv[])
     const GLuint BufferIndex_DrawCommands = BUFFER_INDEX_PERFRAME_UNIFORMS + 2;
     const GLuint BufferIndex_NumVisibleMeshes = BUFFER_INDEX_PERFRAME_UNIFORMS + 3;
 
+    // Previous frame data.
+    // XXX: Combine this in the perframe SceneData with proper CPU std140 packing.
+    const GLuint BufferIndex_PrevFrameData = 10;
+    const GLsizeiptr BufferSize_PrevFrameData = sizeof(GPUPrevFrameData);
+    auto bufferPrevFrameData
+        = CreateBuffer(BufferSize_PrevFrameData, nullptr, GL_DYNAMIC_STORAGE_BIT);
+    glBindBufferRange(GL_UNIFORM_BUFFER, BufferIndex_PrevFrameData, bufferPrevFrameData->m_Handle,
+                      0, BufferSize_PrevFrameData);
+
+    // Per frame scene params.
     auto bufferSceneData = CreateBuffer(BufferSize_SceneData, nullptr, GL_DYNAMIC_STORAGE_BIT);
     glBindBufferRange(GL_UNIFORM_BUFFER, BUFFER_INDEX_PERFRAME_UNIFORMS, bufferSceneData->m_Handle,
                       0, BufferSize_SceneData);
@@ -323,7 +347,17 @@ int main(int argc, char* argv[])
     /*
      * Offscreen render targets.
      */
-    auto fbOpaque = CreateFramebuffer(windowWidth, windowHeight, GL_RGBA16F, GL_DEPTH_COMPONENT24);
+
+    /*
+     * 2 color attachments for the main mesh pass: mesh itself(with forward shading) and velocity
+     * TAA buffer.
+     * XXX: Might want to add more texture params freedoms(such as sampling filter) for the
+     *      framebuffer.
+     */
+    auto fbOpaque
+        = CreateFramebuffer(windowWidth, windowHeight, GL_RGBA16F, GL_DEPTH_COMPONENT24, 2);
+    fbOpaque->attachmentColor = fbOpaque->attachmentColors[0];
+
     auto fbLuminance = CreateFramebuffer(64, 64, GL_RGBA16F, 0);
     auto fbBrightPass = CreateFramebuffer(256, 256, GL_RGBA16F, 0);
     auto fbBloom1 = CreateFramebuffer(256, 256, GL_RGBA16F, 0);
@@ -412,27 +446,8 @@ int main(int argc, char* argv[])
     /*
      * TAA setup.
      */
-    constexpr auto JitterSequenceCount = 16;
-    // Hardcoded halton sequence.
-    const std::vector<vec2> HaltonSequence
-        = {{0.500000, 0.333333}, {0.250000, 0.666667}, {0.750000, 0.111111}, {0.125000, 0.444444},
-           {0.625000, 0.777778}, {0.375000, 0.222222}, {0.875000, 0.555556}, {0.062500, 0.888889},
-           {0.562500, 0.037037}, {0.312500, 0.370370}, {0.812500, 0.703704}, {0.187500, 0.148148},
-           {0.687500, 0.481481}, {0.437500, 0.814815}, {0.937500, 0.259259}, {0.031250, 0.592593}};
-
-    // XXX: Need to recalculate these when resolution changes.
-    std::vector<vec2> jitterOffsets(JitterSequenceCount);
-    for (int i = 0; i < JitterSequenceCount; i++)
-    {
-        auto offset = HaltonSequence[i];
-        offset.x = ((offset.x - 0.5f) / windowWidth) * 2;
-        offset.y = ((offset.y - 0.5f) / windowHeight) * 2;
-
-        LOG_INFO("Jitter offset x: ", offset.x);
-        LOG_INFO("Jitter offset y: ", offset.y);
-
-        jitterOffsets[i] = offset;
-    }
+    u32 jitterIndex = 0;
+    u32 jitterSequenceCount = 8;
 
     auto fsTAAResolve = CreateShader("Shaders/AntiAliasing/TAAResolve.fs.glsl");
     auto programTAAResolve = CreateProgram(vsFullScreenQuad, fsTAAResolve);
@@ -441,6 +456,10 @@ int main(int argc, char* argv[])
 
     auto fbTAAColor = CreateFramebuffer(windowWidth, windowHeight, GL_RGBA16F, 0);
     auto fbTAAColorHistory = CreateFramebuffer(windowWidth, windowHeight, GL_RGBA16F, 0);
+
+    auto vsTAAMesh = CreateShader("Shaders/Scene/MeshTAA.vs.glsl");
+    auto fsTAAMesh = CreateShader("Shaders/Scene/MeshTAA.fs.glsl");
+    auto programTAAMesh = CreateProgram(vsTAAMesh, fsTAAMesh);
 
     // Misc. utils.
     u32 frameCount = 0;
@@ -459,6 +478,14 @@ int main(int argc, char* argv[])
     float deltaSeconds = 0.0f;
 
     std::string gpuName = gpuDevice.GetGPUName();
+
+    mat4 prevView;
+    mat4 prevProj;
+
+    LOG_INFO("Color att 0: ", fbOpaque->attachmentColors[0],
+             " Handle: ", fbOpaque->attachmentColors[0]->m_Handle);
+    LOG_INFO("Color att 1: ", fbOpaque->attachmentColors[1],
+             " Handle: ", fbOpaque->attachmentColors[1]->m_Handle);
 
     while (!glfwWindowShouldClose(windowPtr))
     {
@@ -486,10 +513,22 @@ int main(int argc, char* argv[])
         // Clear draw (opaque) framebuffer.
         glClearNamedFramebufferfv(fbOpaque->m_Handle, GL_COLOR, 0,
                                   glm::value_ptr(vec4(0.0f, 0.0f, 0.0f, 1.0f)));
+        glClearNamedFramebufferfv(fbOpaque->m_Handle, GL_COLOR, 1,
+                                  glm::value_ptr(vec4(0.0f, 0.0f, 0.0f, 1.0f)));
         glClearNamedFramebufferfi(fbOpaque->m_Handle, GL_DEPTH_STENCIL, 0, 1.0f, 0);
+
+        glClearNamedFramebufferfv(fbScreen->m_Handle, GL_COLOR, 0,
+                                  glm::value_ptr(vec4(0.0f, 0.0f, 0.0f, 1.0f)));
+        glClearNamedFramebufferfi(fbScreen->m_Handle, GL_DEPTH_STENCIL, 0, 1.0f, 0);
 
         const mat4 proj = glm::perspective(45.0f, ratio, 0.1f, 1000.0f);
         const mat4 view = mainCamera.GetViewMatrix();
+
+        if (frameCount == 0)
+        {
+            prevView = view;
+            prevProj = proj;
+        }
 
         // Light parameters for shadow mapping.
         const glm::mat4 rot1
@@ -514,6 +553,14 @@ int main(int argc, char* argv[])
         sceneData.cameraPos = glm::vec4(mainCamera.GetPosition(), 1.0f);
         GetFrustumPlanes(proj * renderState.cullingView, sceneData.frustumPlanes);
         GetFrustumCorners(proj * renderState.cullingView, sceneData.frustumCorners);
+
+        GPUPrevFrameData prevFrameData;
+        prevFrameData.prevView = prevView;
+        prevFrameData.prevProj = prevProj;
+        prevFrameData.currViewWidth = windowWidth;
+        prevFrameData.currViewHeight = windowHeight;
+        glNamedBufferSubData(bufferPrevFrameData->m_Handle, 0, BufferSize_PrevFrameData,
+                             &prevFrameData);
 
         ClearTransparencyBuffers();
 
@@ -588,9 +635,17 @@ int main(int argc, char* argv[])
             sceneData.light = mat4(0.0f);
         }
 
-        auto taaJitterOffset = jitterOffsets[frameCount % 16];
-        sceneData.jitterOffsetX = taaJitterOffset.x;
-        sceneData.jitterOffsetY = taaJitterOffset.y;
+        // TAA jitter.
+        float haltonX = 2.0f * Halton(jitterIndex + 1, 2) - 1.0f;
+        float haltonY = 2.0f * Halton(jitterIndex + 1, 3) - 1.0f;
+        float jitterX = (haltonX / windowWidth);
+        float jitterY = (haltonY / windowHeight);
+
+        jitterIndex = (jitterIndex + 1) % jitterSequenceCount;
+
+        sceneData.jitterOffsetX = jitterX;
+        sceneData.jitterOffsetY = jitterY;
+
         glNamedBufferSubData(bufferSceneData->m_Handle, 0, BufferSize_SceneData, &sceneData);
 
         // Mesh pass.
@@ -601,12 +656,15 @@ int main(int argc, char* argv[])
 
             fbOpaque->Bind();
 
-            skybox.Draw();
+            // skybox.Draw();
 
             if (renderState.drawOpaque)
             {
                 if (renderState.enableTAA)
-                    programSceneMesh->Use();
+                {
+                    // programSceneMesh->Use();
+                    programTAAMesh->Use();
+                }
                 else
                     programSceneMeshNoJitter->Use();
 
@@ -622,11 +680,11 @@ int main(int argc, char* argv[])
 
                 // XXX: Currently transparent meshes not sampled (no TAA jitter).
                 programOITMesh->Use();
-                // mesh.Draw(bufferIndirectMeshesTransparent->m_DrawCommands.size(),
-                //   bufferIndirectMeshesTransparent);
+                mesh.Draw(bufferIndirectMeshesTransparent->m_DrawCommands.size(),
+                          bufferIndirectMeshesTransparent);
 
                 // This shader pass is needed, even with no draw commands.
-                mesh.Draw(bufferIndirectMeshesTransparent->m_DrawCommands.size(), 0);
+                // mesh.Draw(bufferIndirectMeshesTransparent->m_DrawCommands.size(), 0);
 
                 glFlush();
                 glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
@@ -635,47 +693,6 @@ int main(int argc, char* argv[])
             }
 
             fbOpaque->Unbind();
-        }
-
-        // TAA.
-        if (renderState.enableTAA)
-        {
-            // Copy current color buffer to history in first frame.
-            if (frameCount == 0)
-            {
-                fbTAAColorHistory->Bind();
-                programBlit->Use();
-                glBindTextureUnit(0, fbOpaque->attachmentColor->m_Handle);
-                glDrawArrays(GL_TRIANGLES, 0, 6);
-                fbTAAColorHistory->Unbind();
-            }
-
-            // XXX: Does current color buffer need to be sampled nearest?
-            // glTextureParameteri(fbOpaque->attachmentColor->m_Handle, GL_TEXTURE_MIN_FILTER,
-            // GL_NEAREST);
-            // glTextureParameteri(fbOpaque->attachmentColor->m_Handle, GL_TEXTURE_MAG_FILTER,
-            //                     // GL_NEAREST);
-
-            // Resolve TAA.
-            fbTAAColor->Bind();
-            programTAAResolve->Use();
-            glBindTextureUnit(0, fbOpaque->attachmentColor->m_Handle);
-            glBindTextureUnit(1, fbTAAColorHistory->attachmentColor->m_Handle);
-            glDrawArrays(GL_TRIANGLES, 0, 6);
-            fbTAAColor->Unbind();
-
-            // Copy to history buffer.
-            fbTAAColorHistory->Bind();
-            programBlit->Use();
-            glBindTextureUnit(0, fbTAAColor->attachmentColor->m_Handle);
-            glDrawArrays(GL_TRIANGLES, 0, 6);
-            fbTAAColorHistory->Unbind();
-        }
-        else
-        {
-            glBlitNamedFramebuffer(fbOpaque->m_Handle, fbTAAColor->m_Handle, 0, 0, windowWidth,
-                                   windowHeight, 0, 0, windowWidth, windowHeight,
-                                   GL_COLOR_BUFFER_BIT, GL_LINEAR);
         }
 
         // SSAO.
@@ -714,14 +731,15 @@ int main(int argc, char* argv[])
             fbScreen->Bind();
             programSSAOCombine->Use();
             glBindTextureUnit(0, fbOpaque->attachmentColor->m_Handle);
-            glBindTextureUnit(0, fbTAAColor->attachmentColor->m_Handle);
             glBindTextureUnit(1, fbSSAO->attachmentColor->m_Handle);
             glDrawArrays(GL_TRIANGLES, 0, 6);
             fbScreen->Unbind();
         }
         else
         {
-            glBlitNamedFramebuffer(fbTAAColor->m_Handle, fbScreen->m_Handle, 0, 0, windowWidth,
+            glClearNamedFramebufferfv(fbScreen->m_Handle, GL_COLOR, 0,
+                                      glm::value_ptr(vec4(0.0f, 0.0f, 0.0f, 1.0f)));
+            glBlitNamedFramebuffer(fbOpaque->m_Handle, fbScreen->m_Handle, 0, 0, windowWidth,
                                    windowHeight, 0, 0, windowWidth, windowHeight,
                                    GL_COLOR_BUFFER_BIT, GL_LINEAR);
         }
@@ -740,6 +758,57 @@ int main(int argc, char* argv[])
         //                            windowHeight, 0, 0, windowWidth, windowHeight,
         //                            GL_COLOR_BUFFER_BIT, GL_LINEAR);
         // }
+
+        // TAA.
+        if (renderState.enableTAA)
+        {
+            // Copy current color buffer to history in first frame.
+            if (frameCount == 0)
+            {
+                fbTAAColorHistory->Bind();
+                programBlit->Use();
+                glBindTextureUnit(0, fbScreen->attachmentColor->m_Handle);
+                glDrawArrays(GL_TRIANGLES, 0, 6);
+                fbTAAColorHistory->Unbind();
+            }
+
+            // XXX: Does current color buffer need to be sampled nearest?
+            glTextureParameteri(fbScreen->attachmentColor->m_Handle, GL_TEXTURE_MIN_FILTER,
+                                GL_NEAREST);
+            glTextureParameteri(fbScreen->attachmentColor->m_Handle, GL_TEXTURE_MAG_FILTER,
+                                GL_NEAREST);
+
+            // Resolve TAA.
+            fbTAAColor->Bind();
+            programTAAResolve->Use();
+            glBindTextureUnit(0, fbScreen->attachmentColor->m_Handle);
+            // Bind history.
+            glBindTextureUnit(1, fbTAAColorHistory->attachmentColor->m_Handle);
+            // Bind velocity.
+            glBindTextureUnit(2, fbOpaque->attachmentColors[1]->m_Handle);
+            // Bind depth.
+            glBindTextureUnit(3, fbOpaque->attachmentDepth->m_Handle);
+
+            glDrawArrays(GL_TRIANGLES, 0, 6);
+            fbTAAColor->Unbind();
+
+            // Copy to history buffer.
+            fbTAAColorHistory->Bind();
+            programBlit->Use();
+            glBindTextureUnit(0, fbTAAColor->attachmentColor->m_Handle);
+            glDrawArrays(GL_TRIANGLES, 0, 6);
+            fbTAAColorHistory->Unbind();
+        }
+        else
+        {
+            glBlitNamedFramebuffer(fbScreen->m_Handle, fbTAAColor->m_Handle, 0, 0, windowWidth,
+                                   windowHeight, 0, 0, windowWidth, windowHeight,
+                                   GL_COLOR_BUFFER_BIT, GL_LINEAR);
+        }
+
+        glBlitNamedFramebuffer(fbTAAColor->m_Handle, fbScreen->m_Handle, 0, 0, windowWidth,
+                               windowHeight, 0, 0, windowWidth, windowHeight, GL_COLOR_BUFFER_BIT,
+                               GL_LINEAR);
 
         // HDR.
         if (renderState.enableHDR)
@@ -897,7 +966,10 @@ int main(int argc, char* argv[])
         if (renderState.enableShadows)
             ImguiTextureWindowGL("Shadow Map", fbShadowMap->attachmentDepth->m_Handle);
 
-        ImguiTextureWindowGL("Depth map", fbOpaque->attachmentDepth->m_Handle);
+        // ImguiTextureWindowGL("Depth Map", fbOpaque->attachmentDepth->m_Handle);
+
+        ImguiTextureWindowGL("Mesh Buffer", fbOpaque->attachmentColors[0]->m_Handle);
+        ImguiTextureWindowGL("Velocity Buffer", fbOpaque->attachmentColors[1]->m_Handle);
 
         const ImGuiWindowFlags guiflags = ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize
                                           | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoScrollbar
@@ -919,6 +991,9 @@ int main(int argc, char* argv[])
         window.PollEvents();
         window.SwapBuffers();
         frameCount++;
+
+        prevView = sceneData.view;
+        prevProj = sceneData.proj;
     }
 
     glUnmapNamedBuffer(bufferNumVisibleMeshes->m_Handle);

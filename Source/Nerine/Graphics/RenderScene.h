@@ -34,6 +34,26 @@ struct GPUSceneData
     // XXX: Create packed vec2?
     float jitterOffsetX;
     float jitterOffsetY;
+
+    // XXX: This is a packed uvec2.
+    // u32 currViewWidth;
+    // u32 currViewHeight;
+
+    // mat4 prevView;
+    // mat4 prevProj;
+};
+
+// XXX: Combine this with GPUSceneData.
+struct GPUPrevFrameData
+{
+    mat4 prevView;
+    mat4 prevProj;
+
+    i32 currViewWidth;
+    i32 currViewHeight;
+
+    // u32 currViewWidth;
+    // u32 currViewHeight;
 };
 
 struct GPUSSAOParams

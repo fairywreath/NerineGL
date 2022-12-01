@@ -1,0 +1,40 @@
+float4 clip_aabb(float3 aabb_min, float3 aabb_max, float4 p, float4 q)
+{
+#if USE_OPTIMIZATIONS
+    // note: only clips towards aabb center (but fast!)
+    float3 p_clip = 0.5 * (aabb_max + aabb_min);
+    float3 e_clip = 0.5 * (aabb_max - aabb_min) + FLT_EPS;
+
+    float4 v_clip = q - float4(p_clip, p.w);
+    float3 v_unit = v_clip.xyz / e_clip;
+    float3 a_unit = abs(v_unit);
+    float ma_unit = max(a_unit.x, max(a_unit.y, a_unit.z));
+
+    if (ma_unit > 1.0)
+        return float4(p_clip, p.w) + v_clip / ma_unit;
+    else
+        return q; // point inside aabb
+#else
+    float4 r = q - p;
+    float3 rmax = aabb_max - p.xyz;
+    float3 rmin = aabb_min - p.xyz;
+
+    const float eps = FLT_EPS;
+
+    if (r.x > rmax.x + eps)
+        r *= (rmax.x / r.x);
+    if (r.y > rmax.y + eps)
+        r *= (rmax.y / r.y);
+    if (r.z > rmax.z + eps)
+        r *= (rmax.z / r.z);
+
+    if (r.x < rmin.x - eps)
+        r *= (rmin.x / r.x);
+    if (r.y < rmin.y - eps)
+        r *= (rmin.y / r.y);
+    if (r.z < rmin.z - eps)
+        r *= (rmin.z / r.z);
+
+    return p + r;
+#endif
+}

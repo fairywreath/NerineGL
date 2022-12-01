@@ -4,6 +4,7 @@
 
 #include <memory>
 #include <string>
+#include <vector>
 
 #include <Core/Resource.h>
 #include <Core/Types.h>
@@ -125,6 +126,10 @@ public:
     GLFramebuffer(u32 width, u32 height, GLenum formatColor, GLenum formatDepth,
                   SamplerFilterType filterType = SamplerFilterType::Linear);
 
+    GLFramebuffer(u32 width, u32 height, GLenum formatColor, GLenum formatDepth,
+                  u32 numColorAttachments,
+                  SamplerFilterType filterType = SamplerFilterType::Linear);
+
     ~GLFramebuffer();
 
     void Create(u32 width, u32 height, GLenum formatColor, GLenum formatDepth,
@@ -140,11 +145,18 @@ public:
 
     TextureHandle attachmentColor;
     TextureHandle attachmentDepth;
+
+    std::vector<TextureHandle> attachmentColors;
 };
 
 using FramebufferHandle = RefCountPtr<GLFramebuffer>;
 
 FramebufferHandle CreateFramebuffer(u32 width, u32 height, GLenum formatColor, GLenum formatDepth,
+                                    GLFramebuffer::SamplerFilterType filterType
+                                    = GLFramebuffer::SamplerFilterType::Linear);
+
+FramebufferHandle CreateFramebuffer(u32 width, u32 height, GLenum formatColor, GLenum formatDepth,
+                                    u32 numColorAttachments,
                                     GLFramebuffer::SamplerFilterType filterType
                                     = GLFramebuffer::SamplerFilterType::Linear);
 

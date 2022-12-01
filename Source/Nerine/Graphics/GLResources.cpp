@@ -207,6 +207,13 @@ FramebufferHandle CreateFramebuffer(u32 width, u32 height, GLenum formatColor, G
     return FramebufferHandle::Create(
         new GLFramebuffer(width, height, formatColor, formatDepth, filterType));
 }
+FramebufferHandle CreateFramebuffer(u32 width, u32 height, GLenum formatColor, GLenum formatDepth,
+                                    u32 numColorAttachments,
+                                    GLFramebuffer::SamplerFilterType filterType)
+{
+    return FramebufferHandle::Create(new GLFramebuffer(width, height, formatColor, formatDepth,
+                                                       numColorAttachments, filterType));
+}
 
 GLProgram::GLProgram(const ShaderHandle& a)
 {
@@ -269,6 +276,60 @@ GLFramebuffer::GLFramebuffer(u32 width, u32 height, GLenum formatColor, GLenum f
                              SamplerFilterType filterType)
 {
     Create(width, height, formatColor, formatDepth, filterType);
+}
+
+GLFramebuffer::GLFramebuffer(u32 width, u32 height, GLenum formatColor, GLenum formatDepth,
+                             u32 numColorAttachments, SamplerFilterType filterType)
+{
+    glCreateFramebuffers(1, &m_Handle);
+
+    if (formatColor)
+    {
+        attachmentColors.resize(numColorAttachments);
+        std::vector<GLenum> attachments(numColorAttachments);
+
+        for (int i = 0; i < numColorAttachments; i++)
+        {
+            auto attColor = CreateTexture(GL_TEXTURE_2D, width, height, formatColor);
+
+            // Default filter type from CreateTexture is Linear.
+
+            if (filterType == SamplerFilterType::Nearest)
+            {
+                glTextureParameteri(attColor->m_Handle, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+                glTextureParameteri(attColor->m_Handle, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+            }
+
+            glTextureParameteri(attColor->m_Handle, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+            glTextureParameteri(attColor->m_Handle, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+            glNamedFramebufferTexture(m_Handle, GL_COLOR_ATTACHMENT0 + i, attColor->m_Handle, 0);
+
+            attachments[i] = GL_COLOR_ATTACHMENT0 + i;
+            attachmentColors[i] = std::move(attColor);
+        }
+
+        LOG_INFO("Number of color attachments: ", numColorAttachments);
+        const GLenum attEnums[] = {GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1};
+        glNamedFramebufferDrawBuffers(m_Handle, 2, attEnums);
+    }
+    if (formatDepth)
+    {
+        attachmentDepth = CreateTexture(GL_TEXTURE_2D, width, height, formatDepth);
+
+        const float border[] = {0.0f, 0.0f, 0.0f, 0.0f};
+
+        glTextureParameterfv(attachmentDepth->m_Handle, GL_TEXTURE_BORDER_COLOR, border);
+        glTextureParameteri(attachmentDepth->m_Handle, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
+        glTextureParameteri(attachmentDepth->m_Handle, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
+        glNamedFramebufferTexture(m_Handle, GL_DEPTH_ATTACHMENT, attachmentDepth->m_Handle, 0);
+    }
+
+    const GLenum status = glCheckNamedFramebufferStatus(m_Handle, GL_FRAMEBUFFER);
+
+    assert(status == GL_FRAMEBUFFER_COMPLETE);
+
+    m_Width = width;
+    m_Height = height;
 }
 
 GLFramebuffer::~GLFramebuffer()
