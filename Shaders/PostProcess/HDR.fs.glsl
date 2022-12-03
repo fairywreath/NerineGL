@@ -34,6 +34,6 @@ void main()
     float midGray = 0.5;
 
     color *= exposure * midGray / (avgLuminance + 0.001);
-    color = Reinhard2(color);
+    // color = Reinhard2(color);
     out_FragColor = vec4(color + bloomStrength * bloom, 1.0);
 }

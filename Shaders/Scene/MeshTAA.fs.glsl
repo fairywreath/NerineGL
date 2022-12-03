@@ -74,9 +74,11 @@ float ShadowFactor(vec4 shadowCoord)
 vec2 CalcTAAVelocity(vec4 newPos, vec4 oldPos, uvec2 viewSize)
 {
     oldPos /= oldPos.w;
+    // oldPos = oldPos * 0.5 + 0.5;
     oldPos.xy = (oldPos.xy + 1) / 2.0f;
 
     newPos /= newPos.w;
+    // newPos = newPos * 0.5 + 0.5;
     newPos.xy = (newPos.xy + 1) / 2.0f;
 
     // Invert for eg. Metal or Vulkan.

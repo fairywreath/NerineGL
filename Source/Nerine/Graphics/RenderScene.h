@@ -75,6 +75,22 @@ struct GPUHDRParams
     float adaptationSpeed{0.1f};
 };
 
+struct GPUTAAParams
+{
+    u32 haltonSequenceCount{16};
+    float sourceWeight{0.05};
+
+    u32 colorClampingType{1};
+
+    u32 luminanceWeigh{1};
+};
+
+struct GPUFXAAParams
+{
+    float threshold{0.0314};
+    float relativeThreshold{0.125};
+};
+
 static_assert(sizeof(GPUSSAOParams) <= sizeof(GPUSceneData));
 static_assert(sizeof(GPUHDRParams) <= sizeof(GPUSceneData));
 
@@ -89,6 +105,14 @@ struct GPUTransparentFragment
 
     float depth;
     u32 next;
+};
+
+enum class AntiAliasingType
+{
+    NONE = 0,
+    TAA = 1,
+    FXAA = 2,
+    MSAA_4X = 3
 };
 
 /*

@@ -40,6 +40,8 @@ public:
     GLTexture(GLenum type, const std::string& fileName, GLenum clamp = GL_REPEAT);
     GLTexture(u32 width, u32 height, const void* data);
 
+    explicit GLTexture(u32 handle) : m_Handle(handle){};
+
     ~GLTexture();
 
     void Create(GLenum type, u32 width, u32 height, GLenum internalFormat,
@@ -130,6 +132,9 @@ public:
                   u32 numColorAttachments,
                   SamplerFilterType filterType = SamplerFilterType::Linear);
 
+    // Track externally created framebuffer;
+    explicit GLFramebuffer(u32 handle);
+
     ~GLFramebuffer();
 
     void Create(u32 width, u32 height, GLenum formatColor, GLenum formatDepth,
@@ -138,6 +143,8 @@ public:
 
     void Bind();
     void Unbind();
+
+    void SetDrawColorAttachments(u32 offset, u32 count);
 
     u32 m_Width{0};
     u32 m_Height{0};
@@ -159,5 +166,7 @@ FramebufferHandle CreateFramebuffer(u32 width, u32 height, GLenum formatColor, G
                                     u32 numColorAttachments,
                                     GLFramebuffer::SamplerFilterType filterType
                                     = GLFramebuffer::SamplerFilterType::Linear);
+
+FramebufferHandle CreateFramebuffer(u32 handle);
 
 } // namespace Nerine

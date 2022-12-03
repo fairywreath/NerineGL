@@ -29,23 +29,6 @@ layout(location = 5) out VelocityData out_VelocityData;
 const mat4 scaleBias
     = mat4(0.5, 0.0, 0.0, 0.0, 0.0, 0.5, 0.0, 0.0, 0.0, 0.0, 0.5, 0.0, 0.5, 0.5, 0.5, 1.0);
 
-// float4x4 currentFrame_modelMatrix = actorParams.modelMatrix;
-// float4 currentFrame_worldPos  = currentFrame_modelMatrix * float4(in.position, 1.0);
-// float4 currentFrame_clipPos = viewportParams.viewProjectionMatrix * currentFrame_worldPos;
-
-// out.currentFramePosition = currentFrame_clipPos;
-
-// float4 currentFrame_clipPos_jittered =
-//     currentFrame_clipPos + float4(viewportParams.jitter*currentFrame_clipPos.w,0,0);
-
-// out.position = currentFrame_clipPos_jittered;
-
-// float4x4 prevFrame_modelMatrix = actorParams.prevModelMatrix;
-// float4 prevFrame_worldPos  = prevFrame_modelMatrix * float4(in.position, 1.0);
-// float4 prevFrame_clipPos = viewportParams.prevViewProjMatrix * prevFrame_worldPos;
-
-// out.prevFramePosition = prevFrame_clipPos;
-
 void main()
 {
     mat4 model = _models[gl_BaseInstance >> 16];
@@ -54,7 +37,7 @@ void main()
     vec4 clipPos = mvp * vec4(in_Vertex, 1.0);
 
     // Jitter.
-    vec4 clipPosJittered = clipPos + (vec4(taaJitterOffset, 0.0, 0.0) * clipPos.w);
+    vec4 clipPosJittered = clipPos + (vec4(taaJitterOffset * 0.5, 0.0, 0.0) * clipPos.w);
 
     gl_Position = clipPosJittered;
 

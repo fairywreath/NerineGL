@@ -10,7 +10,7 @@ struct MaterialData
 
     uint flags;
 
-    uint64_t ambienOcclusionMap;
+    uint64_t ambientOcclusionMap;
     uint64_t emissiveMap;
     uint64_t albedoMap;
     uint64_t metallicRoughnessMap;

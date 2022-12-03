@@ -12,5 +12,6 @@ void main()
 
     float luminance = dot(color, vec4(0.33, 0.34, 0.33, 0.0));
 
-    out_FragColor = luminance >= 1.0 ? color : vec4(vec3(0.0), 1.0);
+    // out_FragColor = luminance >= 1.0 ? color : vec4(vec3(0.0), 1.0);
+    out_FragColor = luminance >= 1.2 ? color : vec4(vec3(0.0), 1.0);
 }

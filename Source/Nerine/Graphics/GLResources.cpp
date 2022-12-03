@@ -215,6 +215,11 @@ FramebufferHandle CreateFramebuffer(u32 width, u32 height, GLenum formatColor, G
                                                        numColorAttachments, filterType));
 }
 
+FramebufferHandle CreateFramebuffer(u32 handle)
+{
+    return FramebufferHandle::Create(new GLFramebuffer(handle));
+}
+
 GLProgram::GLProgram(const ShaderHandle& a)
 {
     m_Handle = glCreateProgram();
@@ -308,9 +313,7 @@ GLFramebuffer::GLFramebuffer(u32 width, u32 height, GLenum formatColor, GLenum f
             attachmentColors[i] = std::move(attColor);
         }
 
-        LOG_INFO("Number of color attachments: ", numColorAttachments);
-        const GLenum attEnums[] = {GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1};
-        glNamedFramebufferDrawBuffers(m_Handle, 2, attEnums);
+        glNamedFramebufferDrawBuffers(m_Handle, 2, attachments.data());
     }
     if (formatDepth)
     {
@@ -330,6 +333,10 @@ GLFramebuffer::GLFramebuffer(u32 width, u32 height, GLenum formatColor, GLenum f
 
     m_Width = width;
     m_Height = height;
+}
+
+GLFramebuffer::GLFramebuffer(u32 handle) : m_Handle(handle)
+{
 }
 
 GLFramebuffer::~GLFramebuffer()
@@ -400,6 +407,18 @@ void GLFramebuffer::Unbind()
 {
     // XXX: This implicitly binds the swapchain/screen buffer.
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
+}
+
+void GLFramebuffer::SetDrawColorAttachments(u32 offset, u32 count)
+{
+    std::vector<GLenum> attachments(count);
+
+    for (int i = 0; i < count; i++)
+    {
+        attachments[i] = GL_COLOR_ATTACHMENT0 + offset + i;
+    }
+
+    glNamedFramebufferDrawBuffers(m_Handle, count, attachments.data());
 }
 
 namespace

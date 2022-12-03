@@ -2,6 +2,8 @@
 
 #include <Core/Logger.h>
 
+#include <unordered_map>
+
 namespace Nerine
 {
 
@@ -33,13 +35,41 @@ void GLSceneData::Load(const std::string& meshFile, const std::string& sceneFile
     std::vector<std::string> textureFiles;
     LoadMaterials(materialFile, materials, textureFiles);
 
+    std::unordered_map<std::string, u32> fnMap;
+
     for (const auto& file : textureFiles)
     {
         materialTextures.push_back(TextureHandle::Create(new GLTexture(GL_TEXTURE_2D, file)));
+        if (!fnMap.contains(file))
+        {
+            fnMap[file] = 0;
+        }
     }
 
+    LOG_INFO("Unique files count: ", fnMap.size());
+
+    int idx = 0;
     for (auto& material : materials)
     {
+        auto matName = scene.materialNames[idx];
+
+        if (material.ambientOcclusionMap != INVALID_TEXTURE)
+        {
+            LOG_INFO("Contains ambient occlusion map!");
+        }
+        if (material.emissiveMap != INVALID_TEXTURE)
+        {
+            LOG_INFO("Contains emissive map!", matName);
+        }
+        if (material.metallicRoughnessMap != INVALID_TEXTURE)
+        {
+            LOG_INFO("Contains metallic roughness map!");
+        }
+        if (material.normalMap != INVALID_TEXTURE)
+        {
+            LOG_INFO("Contains normal map! ", matName);
+        }
+
         material.ambientOcclusionMap
             = GetTextureHandleBindless(material.ambientOcclusionMap, materialTextures);
         material.emissiveMap = GetTextureHandleBindless(material.emissiveMap, materialTextures);
@@ -47,6 +77,8 @@ void GLSceneData::Load(const std::string& meshFile, const std::string& sceneFile
         material.metallicRoughnessMap
             = GetTextureHandleBindless(material.metallicRoughnessMap, materialTextures);
         material.normalMap = GetTextureHandleBindless(material.normalMap, materialTextures);
+
+        idx++;
     }
 }
 
@@ -59,19 +91,37 @@ void GLSceneData::LoadSceneFile(const std::string& sceneFile)
         return;
     }
 
+    u32 minMatIndex = 20000;
+    u32 maxMatIndex = 0;
+
     for (const auto& c : scene.meshesMap)
     {
         auto material = scene.materialsMap.find(c.first);
         if (material != scene.materialsMap.end())
         {
+            // LOG_INFO("Material index: ", material->second);
+
             shapes.push_back(DrawData{.meshIndex = c.second,
                                       .materialIndex = material->second,
                                       .LOD = 0,
                                       .indexOffset = meshData.meshes[c.second].indexOffset,
                                       .vertexOffset = meshData.meshes[c.second].vertexOffset,
                                       .transformIndex = c.first});
+
+            minMatIndex = std::min(minMatIndex, material->second);
+            maxMatIndex = std::max(maxMatIndex, material->second);
+
+            // LOG_INFO("Material name: ", scene.materialNames[material->second]);
         }
     }
+
+    for (const auto& name : scene.materialNames)
+    {
+        LOG_INFO("Material name: ", name);
+    }
+
+    LOG_INFO("Min mat mindex:", minMatIndex);
+    LOG_INFO("Max mat index: ", maxMatIndex);
 
     MarkAsChanged(scene, 0);
     RecalculateGlobalTransforms(scene);
