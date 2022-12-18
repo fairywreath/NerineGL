@@ -53,23 +53,6 @@ void GLSceneData::Load(const std::string& meshFile, const std::string& sceneFile
     {
         auto matName = scene.materialNames[idx];
 
-        if (material.ambientOcclusionMap != INVALID_TEXTURE)
-        {
-            LOG_INFO("Contains ambient occlusion map!");
-        }
-        if (material.emissiveMap != INVALID_TEXTURE)
-        {
-            LOG_INFO("Contains emissive map!", matName);
-        }
-        if (material.metallicRoughnessMap != INVALID_TEXTURE)
-        {
-            LOG_INFO("Contains metallic roughness map!");
-        }
-        if (material.normalMap != INVALID_TEXTURE)
-        {
-            LOG_INFO("Contains normal map! ", matName);
-        }
-
         material.ambientOcclusionMap
             = GetTextureHandleBindless(material.ambientOcclusionMap, materialTextures);
         material.emissiveMap = GetTextureHandleBindless(material.emissiveMap, materialTextures);
@@ -91,37 +74,19 @@ void GLSceneData::LoadSceneFile(const std::string& sceneFile)
         return;
     }
 
-    u32 minMatIndex = 20000;
-    u32 maxMatIndex = 0;
-
     for (const auto& c : scene.meshesMap)
     {
         auto material = scene.materialsMap.find(c.first);
         if (material != scene.materialsMap.end())
         {
-            // LOG_INFO("Material index: ", material->second);
-
             shapes.push_back(DrawData{.meshIndex = c.second,
                                       .materialIndex = material->second,
                                       .LOD = 0,
                                       .indexOffset = meshData.meshes[c.second].indexOffset,
                                       .vertexOffset = meshData.meshes[c.second].vertexOffset,
                                       .transformIndex = c.first});
-
-            minMatIndex = std::min(minMatIndex, material->second);
-            maxMatIndex = std::max(maxMatIndex, material->second);
-
-            // LOG_INFO("Material name: ", scene.materialNames[material->second]);
         }
     }
-
-    for (const auto& name : scene.materialNames)
-    {
-        LOG_INFO("Material name: ", name);
-    }
-
-    LOG_INFO("Min mat mindex:", minMatIndex);
-    LOG_INFO("Max mat index: ", maxMatIndex);
 
     MarkAsChanged(scene, 0);
     RecalculateGlobalTransforms(scene);
@@ -139,7 +104,8 @@ SkyboxRenderer::SkyboxRenderer(const std::string& envMapFile, const std::string&
 
 SkyboxRenderer::~SkyboxRenderer()
 {
-    glDeleteVertexArrays(1, &m_VAO);
+    // YYY REMOVE THIS: Properly handle moves.
+    // glDeleteVertexArrays(1, &m_VAO);
 }
 
 void SkyboxRenderer::Draw()
@@ -150,6 +116,11 @@ void SkyboxRenderer::Draw()
     glBindVertexArray(m_VAO);
     glDrawArrays(GL_TRIANGLES, 0, 36);
     glDepthMask(true);
+
+    // YYY: Bind here for usage in the next pipeline. Shouldnt be here.
+    const GLuint textures[]
+        = {m_EnvMap->m_Handle, m_EnvMapIrradiance->m_Handle, m_BrdfLUT->m_Handle};
+    glBindTextures(5, 3, textures);
 }
 
 GLIndirectBuffer::GLIndirectBuffer(size_t maxDrawCommands)
@@ -266,11 +237,6 @@ void GLMesh::Draw(u32 numDrawCommands, IndirectBufferHandle indirectBuffer) cons
                      m_BufferModelMatrices->m_Handle);
     glBindBuffer(GL_DRAW_INDIRECT_BUFFER, (indirectBuffer != nullptr) ? indirectBuffer->m_Handle
                                                                       : m_BufferIndirect->m_Handle);
-
-    // glBindBuffer(GL_PARAMETER_BUFFER, m_BufferIndirect->m_Handle);
-    //  glMultiDrawElementsIndirectCount(GL_TRIANGLES, GL_UNSIGNED_INT, (const
-    //  void*)sizeof(GLsizei), 0,
-    //                                   numDrawCommands, 0);
 
     glMultiDrawElementsIndirect(GL_TRIANGLES, GL_UNSIGNED_INT, nullptr, (GLsizei)numDrawCommands,
                                 0);

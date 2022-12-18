@@ -73,8 +73,10 @@ void FirstPersonCameraController::Update(double deltaSeconds, const glm::vec2& m
     if (Movement.down)
         accel -= up;
 
-    if (Movement.fast)
-        accel *= FastCoef;
+    accel *= FastCoef;
+
+    // if (Movement.fast)
+    // accel *= FastCoef;
 
     if (accel == vec3(0))
     {
@@ -86,7 +88,8 @@ void FirstPersonCameraController::Update(double deltaSeconds, const glm::vec2& m
     {
         // acceleration
         m_MoveSpeed += accel * Acceleration * static_cast<float>(deltaSeconds);
-        const float maxSpeed = Movement.fast ? MaxSpeed * FastCoef : MaxSpeed;
+        // const float maxSpeed = Movement.fast ? MaxSpeed * FastCoef : MaxSpeed;
+        const float maxSpeed = MaxSpeed * FastCoef;
         if (glm::length(m_MoveSpeed) > maxSpeed)
             m_MoveSpeed = glm::normalize(m_MoveSpeed) * maxSpeed;
     }

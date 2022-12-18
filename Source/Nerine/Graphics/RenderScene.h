@@ -49,9 +49,10 @@ struct GPUPrevFrameData
     mat4 prevView;
     mat4 prevProj;
 
-    i32 currViewWidth;
-    i32 currViewHeight;
+    // i32 currViewWidth;
+    // i32 currViewHeight;
 
+    float emissiveMapStrength{1.0f};
     // u32 currViewWidth;
     // u32 currViewHeight;
 };
@@ -216,7 +217,6 @@ public:
 
     void Draw();
 
-private:
     TextureHandle m_EnvMap;
     TextureHandle m_EnvMapIrradiance;
     TextureHandle m_BrdfLUT{CreateTexture(GL_TEXTURE_2D, "Resources/brdfLUT.ktx")};

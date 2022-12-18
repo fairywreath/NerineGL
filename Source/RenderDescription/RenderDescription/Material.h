@@ -10,11 +10,11 @@ namespace Nerine
 
 constexpr u64 INVALID_TEXTURE = 0xFFFFFFFF;
 
+// Extra flags.
 enum class MaterialFlags : u8
 {
-    TRANSPARENT = 0x1,
-    CAST_SHADOW = 0x2,
-    RECEIVE_SHADOW = 0x4,
+    NONE = 0,
+    TRANSPARENT = 1,
 };
 
 ENUM_CLASS_FLAG_OPERATORS(MaterialFlags);
@@ -31,7 +31,7 @@ struct PACKED_STRUCT MaterialDescription
     float metallicFactor{0.0f};
 
     // XXX: Handle flags nicely.
-    u32 flags{u32(MaterialFlags::CAST_SHADOW | MaterialFlags::RECEIVE_SHADOW)};
+    u32 flags{u32(MaterialFlags::NONE)};
 
     // Index to texture names/array.
     u64 ambientOcclusionMap{INVALID_TEXTURE};
@@ -40,7 +40,7 @@ struct PACKED_STRUCT MaterialDescription
     u64 metallicRoughnessMap{INVALID_TEXTURE};
     u64 normalMap{INVALID_TEXTURE};
     u64 opacityMap{INVALID_TEXTURE};
-};
+}; // namespace Nerine
 
 static_assert(sizeof(MaterialDescription) % 16 == 0,
               "MaterialDescription must be padded to 16 bytes!");

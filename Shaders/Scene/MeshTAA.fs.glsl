@@ -74,16 +74,10 @@ float ShadowFactor(vec4 shadowCoord)
 vec2 CalcTAAVelocity(vec4 newPos, vec4 oldPos, uvec2 viewSize)
 {
     oldPos /= oldPos.w;
-    // oldPos = oldPos * 0.5 + 0.5;
     oldPos.xy = (oldPos.xy + 1) / 2.0f;
 
     newPos /= newPos.w;
-    // newPos = newPos * 0.5 + 0.5;
     newPos.xy = (newPos.xy + 1) / 2.0f;
-
-    // Invert for eg. Metal or Vulkan.
-    // oldPos.y = 1 - oldPos.y;
-    // newPos.y = 1 - newPos.y;
 
     return (newPos - oldPos).xy;
 }
@@ -121,10 +115,33 @@ void main()
     // f0: PBR specular reflectance at normal incidence (hardcoded here).
     vec3 f0 = vec3(0.04);
     vec3 diffuseColor = albedo.rgb * (vec3(1.0) - f0);
-    vec3 diffuse = texture(_TextureEnvMapIrradiance, worldNormal.xyz).rgb * diffuseColor;
+
+    // float envMapIrradianceStrength = 0.75f;
+    vec3 envMapColor = texture(_TextureEnvMapIrradiance, worldNormal.xyz).rgb;
+
+    // YYY: Hack to reduce very blue-ish color.
+    envMapColor.b *= 0.72;
+
+    vec3 diffuse = envMapColor * diffuseColor;
 
     // Assign final fragment color.
-    out_FragColor = vec4(diffuse * ShadowFactor(in_ShadowCoord), 1.0);
+    vec4 finalColor = vec4(diffuse * ShadowFactor(in_ShadowCoord), 1.0);
+
+    if (material.emissiveMap > 0)
+    {
+        vec4 emissive = texture(sampler2D(unpackUint2x32(material.emissiveMap)), in_TexCoord);
+
+        float baseEmissiveFactor = 0.35;
+        // float baseEmissiveFactor = 0.45;
+
+        finalColor.rgb += emissive.rgb * (baseEmissiveFactor);
+
+        // Assign extra emissiveStrength on w channel?
+        // float emissiveStrength = 1.1;
+        // finalColor.w = emissiveStrength;
+    }
+
+    out_FragColor = finalColor;
 
     // TAA velocity buffer.
     vec2 velocity

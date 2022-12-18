@@ -10,7 +10,7 @@ void main()
 {
     vec4 color = texture(_TextureScene, uv);
 
-    float luminance = dot(color, vec4(0.3, 0.6, 0.1, 0.0));
+    float luminance = dot(color.rgb, vec3(0.2126, 0.7152, 0.0722));
 
     out_FragColor = vec4(vec3(luminance), 1.0);
 }

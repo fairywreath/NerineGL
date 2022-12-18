@@ -1,4 +1,5 @@
 
+
 #version 460 core
 
 #extension GL_ARB_bindless_texture : require
@@ -21,9 +22,6 @@ layout(binding = 5) uniform samplerCube _TextureEnvMap;
 layout(binding = 6) uniform samplerCube _TextureEnvMapIrradiance;
 layout(binding = 7) uniform sampler2D _TextureBRDFLut;
 
-// Transparent glass "skybox".
-layout(binding = 14) uniform samplerCube _TextureGlass;
-
 layout(location = 0) in vec2 in_TexCoord;
 layout(location = 1) in vec3 in_WorldNormal;
 layout(location = 2) in vec3 in_WorldPos;
@@ -38,6 +36,10 @@ layout(std430, binding = 3) buffer Lists
 {
     TransparentFragment _Fragments[];
 };
+
+// TAA.
+layout(location = 5) in VelocityData in_VelocityData;
+layout(location = 1) out vec4 out_Velocity;
 
 void main()
 {
@@ -69,19 +71,15 @@ void main()
     vec3 diffuseColor = albedo.rgb * (vec3(1.0) - f0);
     vec3 diffuse = texture(_TextureEnvMapIrradiance, in_WorldNormal.xyz).rgb * diffuseColor;
 
-    // YYY MAKE THIS NICE: (ugly :(( )Minor reflections from the env. map for transparent objects.
+    // Minor reflections from the env. map for transparent objects.
     vec3 v = normalize(cameraPos.xyz - in_WorldPos);
     vec3 reflection = reflect(v, worldNormal);
-    // vec3 colorReflection = texture(_TextureEnvMap, reflection).rgb;
-    vec3 colorReflection = texture(_TextureGlass, reflection).rgb;
-
-    colorReflection.rgb *= 0.7;
+    vec3 colorReflection = texture(_TextureEnvMap, reflection).rgb;
 
     // colorReflection *= 0.8;
     // colorReflection.b *= 0.75;
 
     // vec3 colorReflection = vec3(0.13, 0.15, 0.26);
-    // vec3 colorReflection = texture(_TextureGlass, reflection).rgb;
 
     out_FragColor = vec4(diffuse + colorReflection, 1.0);
     // out_FragColor = vec4(diffuse, 1.0);
@@ -104,4 +102,9 @@ void main()
             }
         }
     }
+
+    // TAA velocity buffer.
+    // vec2 velocity
+    // = CalcTAAVelocity(in_VelocityData.currentPos, in_VelocityData.prevPos, uvec2(0, 0));
+    // out_Velocity = vec4(velocity, 0.0, 1.0);
 };

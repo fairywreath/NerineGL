@@ -363,6 +363,11 @@ void GLFramebuffer::Create(u32 width, u32 height, GLenum formatColor, GLenum for
             glTextureParameteri(attachmentColor->m_Handle, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
             glTextureParameteri(attachmentColor->m_Handle, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
         }
+        else
+        {
+            glTextureParameteri(attachmentColor->m_Handle, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+            glTextureParameteri(attachmentColor->m_Handle, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        }
 
         glTextureParameteri(attachmentColor->m_Handle, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
         glTextureParameteri(attachmentColor->m_Handle, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);

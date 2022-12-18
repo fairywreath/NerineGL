@@ -1,0 +1,2 @@
+add_subdirectory(EnvMapIrradiance)
+add_subdirectory(SceneConverter)

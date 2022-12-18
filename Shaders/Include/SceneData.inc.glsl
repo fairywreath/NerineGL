@@ -17,6 +17,8 @@ layout(std140, binding = 10) uniform FrameData
     mat4 prevProj;
 
     // ivec2 currViewSize;
-    ivec2 resolution2;
+    // ivec2 resolution2;
     // vec2 resolution;
+
+    float emissiveMapStrength;
 };
